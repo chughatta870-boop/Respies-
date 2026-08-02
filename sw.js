@@ -299,3 +299,84 @@ self.addEventListener("fetch", (event) => {
   );
 
 });
+/* ==========================================================
+   CACHE CLEANUP
+========================================================== */
+
+async function trimCache(cacheName, maxItems = 80) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+
+  while (keys.length > maxItems) {
+    await cache.delete(keys[0]);
+    keys.shift();
+  }
+}
+
+/* ==========================================================
+   OPTIONAL BACKGROUND SYNC
+========================================================== */
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "recipes-sync") {
+    event.waitUntil(Promise.resolve());
+  }
+});
+
+/* ==========================================================
+   OPTIONAL PUSH NOTIFICATIONS
+========================================================== */
+
+self.addEventListener("push", (event) => {
+
+  const data = event.data
+    ? event.data.json()
+    : {
+        title: "ریسپیز",
+        body: "نئی ریسپی دستیاب ہے۔"
+      };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-96.png"
+    })
+  );
+
+});
+
+/* ==========================================================
+   NOTIFICATION CLICK
+========================================================== */
+
+self.addEventListener("notificationclick", (event) => {
+
+  event.notification.close();
+
+  event.waitUntil(
+
+    clients.matchAll({
+      type: "window",
+      includeUncontrolled: true
+    }).then((clientList) => {
+
+      for (const client of clientList) {
+        if (client.url.includes("./") && "focus" in client) {
+          return client.focus();
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow("./");
+      }
+
+    })
+
+  );
+
+});
+
+/* ==========================================================
+   END OF SERVICE WORKER
+========================================================== */
