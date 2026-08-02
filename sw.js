@@ -140,3 +140,162 @@ function isImage(request) {
   return request.destination === "image";
 
 }
+/* ==========================================================
+   FETCH EVENT
+========================================================== */
+
+self.addEventListener("fetch", (event) => {
+
+  const request = event.request;
+
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+  /* ---------- Google Fonts ---------- */
+
+  if (isFont(url)) {
+
+    event.respondWith(
+
+      caches.open(FONT_CACHE).then(async (cache) => {
+
+        const cached = await cache.match(request);
+
+        if (cached) return cached;
+
+        try {
+
+          const response = await fetch(request);
+
+          if (response.ok) {
+            cache.put(request, response.clone());
+          }
+
+          return response;
+
+        } catch {
+
+          return cached || Response.error();
+
+        }
+
+      })
+
+    );
+
+    return;
+
+  }
+
+  /* ---------- Images (Cache First) ---------- */
+
+  if (isImage(request)) {
+
+    event.respondWith(
+
+      caches.open(IMAGE_CACHE).then(async (cache) => {
+
+        const cached = await cache.match(request, {
+          ignoreSearch: true
+        });
+
+        if (cached) return cached;
+
+        try {
+
+          const response = await fetch(request);
+
+          if (response.ok) {
+
+            cache.put(request, response.clone());
+
+            trimCache(IMAGE_CACHE, 80);
+
+          }
+
+          return response;
+
+        } catch {
+
+          return caches.match("./icons/icon-192.png");
+
+        }
+
+      })
+
+    );
+
+    return;
+
+  }
+
+  /* ---------- HTML Pages (Network First) ---------- */
+
+  if (request.mode === "navigate") {
+
+    event.respondWith(
+
+      (async () => {
+
+        try {
+
+          const network = await fetch(request);
+
+          const cache = await caches.open(STATIC_CACHE);
+
+          cache.put(request, network.clone());
+
+          return network;
+
+        } catch {
+
+          return (
+            await caches.match(request) ||
+            await caches.match("./offline.html") ||
+            await caches.match("./index.html")
+          );
+
+        }
+
+      })()
+
+    );
+
+    return;
+
+  }
+
+  /* ---------- CSS / JS / JSON ---------- */
+
+  event.respondWith(
+
+    caches.match(request, {
+      ignoreSearch: true
+    }).then(async (cached) => {
+
+      const fetchPromise = fetch(request)
+        .then(async (response) => {
+
+          if (response.ok) {
+
+            const cache = await caches.open(STATIC_CACHE);
+
+            cache.put(request, response.clone());
+
+          }
+
+          return response;
+
+        })
+        .catch(() => cached);
+
+      return cached || fetchPromise;
+
+    })
+
+  );
+
+});
